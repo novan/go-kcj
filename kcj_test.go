@@ -5,16 +5,18 @@ import (
 	"github.com/olekukonko/tablewriter"
 	"math/rand"
 	"os"
+	"sort"
 	"testing"
 	"time"
 )
 
 func TestAllStation(t *testing.T) {
-	schedule, _ := ScheduleStation("CUK")
+	schedule, _ := ScheduleStation("CTA")
+	sort.Sort(schedule) // sorted by time
 
 	table := tablewriter.NewWriter(os.Stdout)
 	table.SetHeader([]string{"Train Number", "Misc.", "Class", "Relation",
-		"Starting", "Current", "Arriving", "Departing", "LS", "Status"})
+		"Starting", "Current", "End", "Arriving", "Departing", "LS", "Status"})
 
 	for _, sched := range schedule {
 		table.Append(
@@ -25,6 +27,7 @@ func TestAllStation(t *testing.T) {
 				sched.relation,
 				sched.startingStation,
 				sched.currentStation,
+				sched.endStation,
 				sched.arrivingTime.Format(time.RFC822Z),
 				sched.departingTime.Format(time.RFC822Z),
 				sched.ls,
@@ -38,7 +41,7 @@ func TestAllStation(t *testing.T) {
 
 func TestStationPage(t *testing.T) {
 	rand.Seed(time.Now().UTC().UnixNano())
-	result, count, _ := ScheduleStationPage("CUK", 0)
+	result, count, _ := ScheduleStationPage("MRI", 0)
 	table := tablewriter.NewWriter(os.Stdout)
 	table.SetHeader([]string{"Train Number", "Misc.", "Class", "Relation",
 		"Starting", "Current", "Arriving", "Departing", "LS", "Status"})

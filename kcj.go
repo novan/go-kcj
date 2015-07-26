@@ -28,11 +28,42 @@ type ScheduleItem struct {
 	relation        string
 	startingStation string
 	currentStation  string
+	endStation      string
 	arrivingTime    time.Time
 	departingTime   time.Time
 	ls              string //?
 	status          string //?
 }
+
+type Schedule []ScheduleItem
+
+func (s Schedule) Len() int {
+	return len(s)
+}
+
+func (s Schedule) Less(i, j int) bool {
+	return s[i].arrivingTime.Before(s[j].arrivingTime)
+}
+
+func (s Schedule) Swap(i, j int) {
+	s[i], s[j] = s[j], s[i]
+}
+
+type ByRelation Schedule
+
+func (b ByRelation) Len() int { return len(b) }
+
+func (b ByRelation) Swap(i, j int) { b[i], b[j] = b[j], b[i] }
+
+func (b ByRelation) Less(i, j int) bool { return b[i].relation < b[j].relation }
+
+type ByTrainNumber Schedule
+
+func (b ByTrainNumber) Len() int { return len(b) }
+
+func (b ByTrainNumber) Swap(i, j int) { b[i], b[j] = b[j], b[i] }
+
+func (b ByTrainNumber) Less(i, j int) bool { return b[i].trainNumber < b[j].trainNumber }
 
 func mapToQuery(m map[string]string) string {
 	if len(m) == 0 {
@@ -56,7 +87,7 @@ func buildUrl(base string, qs map[string]string) (url *url.URL, err error) {
 	}
 }
 
-func ScheduleStationPage(station string, page int) (schedule []ScheduleItem, totalCount int, err error) {
+func ScheduleStationPage(station string, page int) (schedule Schedule, totalCount int, err error) {
 	// Randomise User Agents just for fun, we'll use Console's UA, and OLD OS
 	var userAgents = [...]string{
 		"Mozilla/5.0 (PlayStation 4 2.57) AppleWebKit/536.26 (KHTML, like Gecko)",
@@ -163,36 +194,32 @@ func trNodeToSchedule(scheduleNode xml.Node) (item ScheduleItem, err error) {
 		return ScheduleItem{}, err
 	}
 
-	if len(results) > 10 {
-		item = ScheduleItem{
-			trainNumber:     strings.TrimSpace(results[1].String()),
-			misc:            strings.TrimSpace(results[2].String()),
-			class:           strings.TrimSpace(results[3].String()),
-			relation:        strings.TrimSpace(results[4].String()),
-			startingStation: strings.TrimSpace(results[5].String()),
-			currentStation:  strings.TrimSpace(results[6].String()),
-			arrivingTime:    jktTime(strings.TrimSpace(results[7].String())),
-			departingTime:   jktTime(strings.TrimSpace(results[8].String())),
-			ls:              strings.TrimSpace(results[9].String()),
-			status:          strings.TrimSpace(results[10].String()),
-		}
-	} else {
-		item = ScheduleItem{
-			trainNumber:     strings.TrimSpace(results[1].String()),
-			misc:            strings.TrimSpace(results[2].String()),
-			class:           strings.TrimSpace(results[3].String()),
-			relation:        strings.TrimSpace(results[4].String()),
-			startingStation: strings.TrimSpace(results[5].String()),
-			currentStation:  strings.TrimSpace(results[6].String()),
-			arrivingTime:    jktTime(strings.TrimSpace(results[7].String())),
-			departingTime:   jktTime(strings.TrimSpace(results[8].String())),
-			ls:              strings.TrimSpace(results[9].String()),
-		}
+	item = ScheduleItem{
+		trainNumber:     strings.TrimSpace(results[1].String()),
+		misc:            strings.TrimSpace(results[2].String()),
+		class:           strings.TrimSpace(results[3].String()),
+		relation:        strings.TrimSpace(results[4].String()),
+		startingStation: strings.TrimSpace(results[5].String()),
+		currentStation:  strings.TrimSpace(results[6].String()),
+		arrivingTime:    jktTime(strings.TrimSpace(results[7].String())),
+		departingTime:   jktTime(strings.TrimSpace(results[8].String())),
+		ls:              strings.TrimSpace(results[9].String()),
 	}
+
+	if len(results) > 10 {
+		item.status = strings.TrimSpace(results[10].String())
+	}
+
+	stationParts := strings.FieldsFunc(item.relation, func(r rune) bool {
+		return r == '-'
+	})
+
+	item.endStation = stationParts[1] // [ANGKE BOGOR] BOGOR is end station
+
 	return
 }
 
-func ScheduleStation(station string) (schedule []ScheduleItem, err error) {
+func ScheduleStation(station string) (schedule Schedule, err error) {
 
 	// get first page
 	result, count, _ := ScheduleStationPage(station, 0)
