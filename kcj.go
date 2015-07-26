@@ -10,6 +10,8 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 )
 
 const Version = "0.1.0"
@@ -26,8 +28,8 @@ type ScheduleItem struct {
 	relation        string
 	startingStation string
 	currentStation  string
-	arrivingTime    string
-	departingTime   string
+	arrivingTime    time.Time
+	departingTime   time.Time
 	ls              string //?
 	status          string //?
 }
@@ -54,7 +56,7 @@ func buildUrl(base string, qs map[string]string) (url *url.URL, err error) {
 	}
 }
 
-func ScheduleStationPage(station string, page byte) (schedule []ScheduleItem, totalCount int, err error) {
+func ScheduleStationPage(station string, page int) (schedule []ScheduleItem, totalCount int, err error) {
 	// Randomise User Agents just for fun, we'll use Console's UA, and OLD OS
 	var userAgents = [...]string{
 		"Mozilla/5.0 (PlayStation 4 2.57) AppleWebKit/536.26 (KHTML, like Gecko)",
@@ -139,6 +141,20 @@ func ScheduleStationPage(station string, page byte) (schedule []ScheduleItem, to
 	// return string(results[0].String()), nil
 }
 
+// Convert timestamp to Jakarta Time
+func jktTime(timestr string) time.Time {
+	loca, _ := time.LoadLocation("Asia/Jakarta")
+	nowjkt := time.Now().In(loca)
+	parts := strings.FieldsFunc(timestr, func(r rune) bool {
+		return r == ':'
+	})
+	hr, _ := strconv.Atoi(parts[0])
+	mn, _ := strconv.Atoi(parts[1])
+	sec, _ := strconv.Atoi(parts[2])
+
+	return time.Date(nowjkt.Year(), nowjkt.Month(), nowjkt.Day(), hr, mn, sec, 0, loca)
+}
+
 func trNodeToSchedule(scheduleNode xml.Node) (item ScheduleItem, err error) {
 
 	results, err := scheduleNode.Search("./td/text()")
@@ -155,8 +171,8 @@ func trNodeToSchedule(scheduleNode xml.Node) (item ScheduleItem, err error) {
 			relation:        strings.TrimSpace(results[4].String()),
 			startingStation: strings.TrimSpace(results[5].String()),
 			currentStation:  strings.TrimSpace(results[6].String()),
-			arrivingTime:    strings.TrimSpace(results[7].String()),
-			departingTime:   strings.TrimSpace(results[8].String()),
+			arrivingTime:    jktTime(strings.TrimSpace(results[7].String())),
+			departingTime:   jktTime(strings.TrimSpace(results[8].String())),
 			ls:              strings.TrimSpace(results[9].String()),
 			status:          strings.TrimSpace(results[10].String()),
 		}
@@ -168,10 +184,52 @@ func trNodeToSchedule(scheduleNode xml.Node) (item ScheduleItem, err error) {
 			relation:        strings.TrimSpace(results[4].String()),
 			startingStation: strings.TrimSpace(results[5].String()),
 			currentStation:  strings.TrimSpace(results[6].String()),
-			arrivingTime:    strings.TrimSpace(results[7].String()),
-			departingTime:   strings.TrimSpace(results[8].String()),
+			arrivingTime:    jktTime(strings.TrimSpace(results[7].String())),
+			departingTime:   jktTime(strings.TrimSpace(results[8].String())),
 			ls:              strings.TrimSpace(results[9].String()),
 		}
 	}
+	return
+}
+
+func ScheduleStation(station string) (schedule []ScheduleItem, err error) {
+
+	// get first page
+	result, count, _ := ScheduleStationPage(station, 0)
+
+	// Allocate all schedule
+	schedule = make([]ScheduleItem, len(result))
+
+	// Copy the first page
+	copy(schedule, result)
+
+	var pageCount int = count / 10
+
+	if count%10 > 0 {
+		pageCount++
+	}
+
+	// allocate WaitGroup
+	var wg sync.WaitGroup
+
+	c := make(chan []ScheduleItem)
+
+	for i := 1; i < pageCount; i++ {
+		wg.Add(1)
+		go func(page int) {
+			result, _, _ := ScheduleStationPage("CUK", page)
+			c <- result
+			defer wg.Done()
+		}(i)
+	}
+
+	for i := 1; i < pageCount; i++ {
+		items := <-c
+		for _, item := range items {
+			schedule = append(schedule, item)
+		}
+	}
+	wg.Wait()
+	err = nil
 	return
 }
