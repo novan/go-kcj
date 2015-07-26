@@ -217,7 +217,7 @@ func ScheduleStation(station string) (schedule []ScheduleItem, err error) {
 	for i := 1; i < pageCount; i++ {
 		wg.Add(1)
 		go func(page int) {
-			result, _, _ := ScheduleStationPage("CUK", page)
+			result, _, _ := ScheduleStationPage(station, page)
 			c <- result
 			defer wg.Done()
 		}(i)
