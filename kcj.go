@@ -3,11 +3,8 @@ package kcj
 import (
 	"fmt"
 	"github.com/moovweb/gokogiri"
-	"github.com/moovweb/gokogiri/xml"
 	"io/ioutil"
-	"math/rand"
 	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -15,248 +12,170 @@ import (
 )
 
 const Version = "0.1.0"
+const kcjBaseUrl = "http://www.krl.co.id/infonew/rute_jadwal.php" // please open the browser yourself
+const maxChan = 10
 
-// This is redacted, because I don't want this to be able to be searched
-// Please check the URL yourself
-
-const kcjBaseUrl = "REDACTED_SO_IT_WONT_BE_ABLE_TO_BE_SEARCHED" // please open the browser yourself
-
-type ScheduleItem struct {
-	trainNumber     string
-	misc            string
-	class           string
-	relation        string
-	startingStation string
-	currentStation  string
-	endStation      string
-	arrivingTime    time.Time
-	departingTime   time.Time
-	ls              string //?
-	status          string //?
-}
-
-type Schedule []ScheduleItem
-
-func (s Schedule) Len() int {
-	return len(s)
-}
-
-func (s Schedule) Less(i, j int) bool {
-	return s[i].arrivingTime.Before(s[j].arrivingTime)
-}
-
-func (s Schedule) Swap(i, j int) {
-	s[i], s[j] = s[j], s[i]
-}
-
-type ByRelation Schedule
-
-func (b ByRelation) Len() int { return len(b) }
-
-func (b ByRelation) Swap(i, j int) { b[i], b[j] = b[j], b[i] }
-
-func (b ByRelation) Less(i, j int) bool { return b[i].relation < b[j].relation }
-
-type ByTrainNumber Schedule
-
-func (b ByTrainNumber) Len() int { return len(b) }
-
-func (b ByTrainNumber) Swap(i, j int) { b[i], b[j] = b[j], b[i] }
-
-func (b ByTrainNumber) Less(i, j int) bool { return b[i].trainNumber < b[j].trainNumber }
-
-func mapToQuery(m map[string]string) string {
-	if len(m) == 0 {
-		return ""
-	} else {
-		params := url.Values{}
-		for k, v := range m {
-			params.Add(k, v)
-		}
-		return params.Encode()
-	}
-}
-
-func buildUrl(base string, qs map[string]string) (url *url.URL, err error) {
-	baseUrl, err := url.Parse(base)
-	if err != nil {
-		return nil, err
-	} else {
-		baseUrl.RawQuery = mapToQuery(qs)
-		return baseUrl, nil
-	}
-}
-
-func ScheduleStationPage(station string, page int) (schedule Schedule, totalCount int, err error) {
-	// Randomise User Agents just for fun, we'll use Console's UA, and OLD OS
-	var userAgents = [...]string{
-		"Mozilla/5.0 (PlayStation 4 2.57) AppleWebKit/536.26 (KHTML, like Gecko)",
-		"Opera/9.50 (Nintendo DSi; Opera/507; U; en-US)",
-		"Mozilla/5.0 (Nintendo 3DS; U; ; en) Version/1.7498.US",
-		"AmigaVoyager/3.2 (AmigaOS/MC680x0)",
-		"NCSA Mosaic/3.0 (Windows 95)",
-		"Mozilla/3.0 (Planetweb/2.100 JS SSL US; Dreamcast US)",
-		"Mozilla/5.0 (PlayStation Vita 1.80) AppleWebKit/531.22.8 (KHTML, like Gecko) Silk/3.2",
-		"Mozilla/4.0 (compatible; MSIE 6.1; Windows XP; .NET CLR 1.1.4322; .NET CLR 2.0.50727)",
-	}
-
-	param := make(map[string]string)
-	param["stasiun_singgah"] = station
-	param["start"] = fmt.Sprintf("%d", page*10)
-	param["no"] = fmt.Sprintf("%d", page*10+1)
-	param["p_f"] = "0"
+func kcjHttpRequest(param *map[string]string) (content []byte, err error) {
 
 	finalUrl, err := buildUrl(kcjBaseUrl, param)
 
 	if err != nil {
-		return nil, 0, err
+		return nil, err
 	}
-
-	idx := rand.Intn(len(userAgents))
-	userAgent := userAgents[idx]
 
 	client := &http.Client{}
 	req, err := http.NewRequest("GET", finalUrl.String(), nil)
 
 	if err != nil {
-		return nil, 0, err
+		return nil, err
 	}
 
-	req.Header.Add("User-Agent", userAgent)
+	req.Header.Add("User-Agent", randomUserAgents())
 	resp, err := client.Do(req)
 
 	if err != nil {
-		return nil, 0, err
+		return nil, err
 	}
 
 	defer resp.Body.Close()
 
-	content, err := ioutil.ReadAll(resp.Body)
+	content, err = ioutil.ReadAll(resp.Body)
 
 	if err != nil {
-		return nil, 0, err
+		return nil, err
 	}
+
+	return
+}
+
+func SchedulePage(query ScheduleParam, page int) (schedule *Schedule, err error) {
+
+	param := make(map[string]string)
+	param["stasiun_singgah"] = query.station
+	param["start"] = fmt.Sprintf("%d", page*10)
+	param["no"] = fmt.Sprintf("%d", page*10+1)
+	param["p_f"] = "0"
+	param["ska_id"] = query.trainNumber
+
+	content, err := kcjHttpRequest(&param)
 
 	doc, err := gokogiri.ParseHtml(content)
 
 	if err != nil {
-		return nil, 0, err
+		return nil, err
 	}
 
-	schXPath := "/html/body/table/tr[2]/td[2]/table/tr/td/table/tr"
+	const schXPath = "/html/body/table/tr[2]/td[2]/table/tr/td/table/tr"
 	html := doc.Root().FirstChild()
 
 	results, err := html.Search(schXPath)
 
 	if err != nil {
-		return nil, 0, err
+		return nil, err
 	}
 
 	defer doc.Free()
 
-	sched := make([]ScheduleItem, len(results)-1)
+	schedule = &Schedule{}
+	schedule.items = make([]ScheduleItem, len(results)-1)
 
-	for i := 1; i < len(results); i++ {
-		sched[i-1], _ = trNodeToSchedule(results[i])
+	for i, result := range results[1:] {
+		schedule.items[i], _ = trNodeToSchedule(result)
 	}
 
 	// getting total data
-	totalSchXPath := "/html/body/table/tr[3]/td[2]/table/tr[2]/td/text()"
+	const totalSchXPath = "/html/body/table/tr[3]/td[2]/table/tr[2]/td/text()"
 
 	totalResults, err := html.Search(totalSchXPath)
 
-	tot, _ := strconv.Atoi(strings.Fields(strings.TrimSpace(totalResults[0].String()))[6])
+	if err != nil {
+		return nil, err
+	}
 
-	return sched, tot, nil
-	// return schedule, nil
-	// return string(results[0].String()), nil
-}
-
-// Convert timestamp to Jakarta Time
-func jktTime(timestr string) time.Time {
-	loca, _ := time.LoadLocation("Asia/Jakarta")
-	nowjkt := time.Now().In(loca)
-	parts := strings.FieldsFunc(timestr, func(r rune) bool {
-		return r == ':'
-	})
-	hr, _ := strconv.Atoi(parts[0])
-	mn, _ := strconv.Atoi(parts[1])
-	sec, _ := strconv.Atoi(parts[2])
-
-	return time.Date(nowjkt.Year(), nowjkt.Month(), nowjkt.Day(), hr, mn, sec, 0, loca)
-}
-
-func trNodeToSchedule(scheduleNode xml.Node) (item ScheduleItem, err error) {
-
-	results, err := scheduleNode.Search("./td/text()")
+	schedule.totalItems, err =
+		strconv.Atoi(strings.Fields(strings.TrimSpace(totalResults[0].String()))[6])
 
 	if err != nil {
-		return ScheduleItem{}, err
+		return nil, err
 	}
-
-	item = ScheduleItem{
-		trainNumber:     strings.TrimSpace(results[1].String()),
-		misc:            strings.TrimSpace(results[2].String()),
-		class:           strings.TrimSpace(results[3].String()),
-		relation:        strings.TrimSpace(results[4].String()),
-		startingStation: strings.TrimSpace(results[5].String()),
-		currentStation:  strings.TrimSpace(results[6].String()),
-		arrivingTime:    jktTime(strings.TrimSpace(results[7].String())),
-		departingTime:   jktTime(strings.TrimSpace(results[8].String())),
-		ls:              strings.TrimSpace(results[9].String()),
-	}
-
-	if len(results) > 10 {
-		item.status = strings.TrimSpace(results[10].String())
-	}
-
-	stationParts := strings.FieldsFunc(item.relation, func(r rune) bool {
-		return r == '-'
-	})
-
-	item.endStation = stationParts[1] // [ANGKE BOGOR] BOGOR is end station
 
 	return
 }
 
-func ScheduleStation(station string) (schedule Schedule, err error) {
+func ScheduleAll(query ScheduleParam) (schedule *Schedule, err error) {
+	schedule, err = SchedulePage(query, 0)
 
-	// get first page
-	result, count, _ := ScheduleStationPage(station, 0)
+	if err != nil {
+		return nil, err
+	}
 
-	// Allocate all schedule
-	schedule = make([]ScheduleItem, len(result))
+	pageCount := schedule.totalItems / 10
 
-	// Copy the first page
-	copy(schedule, result)
-
-	var pageCount int = count / 10
-
-	if count%10 > 0 {
+	if schedule.totalItems%10 > 0 {
 		pageCount++
 	}
 
-	// allocate WaitGroup
 	var wg sync.WaitGroup
+	var chanNum = pageCount
 
-	c := make(chan []ScheduleItem)
+	if chanNum > maxChan {
+		chanNum = maxChan
+	}
+
+	c := make(chan *Schedule, chanNum)
+
+	rf := func(page int) {
+		// delay sometime not to overwhelm the server
+		time.Sleep(300 * time.Millisecond)
+		result, _ := SchedulePage(query, page)
+		c <- result
+		defer wg.Done()
+	}
 
 	for i := 1; i < pageCount; i++ {
 		wg.Add(1)
-		go func(page int) {
-			result, _, _ := ScheduleStationPage(station, page)
-			c <- result
-			defer wg.Done()
-		}(i)
+		go rf(i)
 	}
 
 	for i := 1; i < pageCount; i++ {
-		items := <-c
-		for _, item := range items {
-			schedule = append(schedule, item)
-		}
+		s := <-c
+		schedule.items = append(schedule.items, s.items...)
 	}
-	wg.Wait()
-	err = nil
+
+	return
+}
+
+func AllTrainNumbers() (numbers []string, err error) {
+
+	content, err := kcjHttpRequest(nil)
+
+	if err != nil {
+		return nil, err
+	}
+
+	doc, err := gokogiri.ParseHtml(content)
+
+	if err != nil {
+		return nil, err
+	}
+
+	defer doc.Free()
+
+	const trainNumXPath = "/html/body/form/table/tr[2]/td[2]/table/tr[4]/td[2]/select/option/text()"
+
+	html := doc.Root().FirstChild()
+
+	numResults, err := html.Search(trainNumXPath)
+
+	if err != nil {
+		return nil, err
+	}
+
+	numbers = make([]string, len(numResults)-1)
+
+	for i, num := range numResults[1:] {
+		numbers[i] = num.String()
+	}
+
 	return
 }

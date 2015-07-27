@@ -12,9 +12,6 @@ USAGE
 $ go get github.com/ykode/go-kcj
 ```
 
-Note: I've redacted the KCJ Base URL as I don't want this to be able to be searched. Please reverse yourself
-from KCJ site
-
 LICENSE
 =======
 
