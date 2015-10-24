@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"errors"
 )
 
 const Version = "0.1.0"
@@ -49,13 +50,16 @@ func kcjHttpRequest(param *map[string]string) (content []byte, err error) {
 }
 
 func SchedulePage(query ScheduleParam, page int) (schedule *Schedule, err error) {
-
 	param := make(map[string]string)
-	param["stasiun_singgah"] = query.station
+	param["stasiun_singgah"] = query.Station
 	param["start"] = fmt.Sprintf("%d", page*10)
 	param["no"] = fmt.Sprintf("%d", page*10+1)
 	param["p_f"] = "0"
-	param["ska_id"] = query.trainNumber
+	param["ska_id"] = query.TrainNumber
+	param["select"] = query.Relation
+	param["select1"] = "10"						// Produk JABOTABEK = COMMUTER LINE
+	param["jam1"] = query.HourFrom
+	param["jam2"] = query.HourTo
 
 	content, err := kcjHttpRequest(&param)
 
@@ -66,21 +70,30 @@ func SchedulePage(query ScheduleParam, page int) (schedule *Schedule, err error)
 	}
 
 	const schXPath = "/html/body/table/tr[2]/td[2]/table/tr/td/table/tr"
+
+	root := doc.Root()
+
+	if root == nil {
+		return nil, errors.New("Empty document?")
+	}
+
 	html := doc.Root().FirstChild()
 
 	results, err := html.Search(schXPath)
 
 	if err != nil {
 		return nil, err
+	} else if len(results) <= 0 {
+		return nil, errors.New("Parsing failed")
 	}
 
 	defer doc.Free()
 
 	schedule = &Schedule{}
-	schedule.items = make([]ScheduleItem, len(results)-1)
+	schedule.Items = make([]ScheduleItem, len(results)-1)
 
 	for i, result := range results[1:] {
-		schedule.items[i], _ = trNodeToSchedule(result)
+		schedule.Items[i], _ = trNodeToSchedule(result)
 	}
 
 	// getting total data
@@ -92,7 +105,7 @@ func SchedulePage(query ScheduleParam, page int) (schedule *Schedule, err error)
 		return nil, err
 	}
 
-	schedule.totalItems, err =
+	schedule.TotalItems, err =
 		strconv.Atoi(strings.Fields(strings.TrimSpace(totalResults[0].String()))[6])
 
 	if err != nil {
@@ -107,11 +120,13 @@ func ScheduleAll(query ScheduleParam) (schedule *Schedule, err error) {
 
 	if err != nil {
 		return nil, err
+	} else if schedule.TotalItems <= 0 {
+		return nil, errors.New("No data")
 	}
 
-	pageCount := schedule.totalItems / 10
+	pageCount := schedule.TotalItems / 10
 
-	if schedule.totalItems%10 > 0 {
+	if schedule.TotalItems%10 > 0 {
 		pageCount++
 	}
 
@@ -139,7 +154,12 @@ func ScheduleAll(query ScheduleParam) (schedule *Schedule, err error) {
 
 	for i := 1; i < pageCount; i++ {
 		s := <-c
-		schedule.items = append(schedule.items, s.items...)
+
+		if s == nil {
+			continue
+		}
+
+		schedule.Items = append(schedule.Items, s.Items...)
 	}
 
 	return

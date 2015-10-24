@@ -68,9 +68,10 @@ func jktTime(timestr string) time.Time {
 	mn, _ := strconv.Atoi(parts[1])
 	sec, _ := strconv.Atoi(parts[2])
 
-	// Train service starts at 4, so midnite train are for next day
+	// Train service starts at 4 AM, so midnite train are for next day
+	// But there's a train arriving at 3:59 which leave at 4 AM in Bogor
 	theDay := nowjkt.Day()
-	if hr < 4 {
+	if hr < 4 || (hr == 3 && mn == 59) {
 		theDay = nowjkt.Day() + 1
 	}
 
@@ -86,26 +87,26 @@ func trNodeToSchedule(scheduleNode xml.Node) (item ScheduleItem, err error) {
 	}
 
 	item = ScheduleItem{
-		trainNumber:     strings.TrimSpace(results[1].String()),
-		misc:            strings.TrimSpace(results[2].String()),
-		class:           strings.TrimSpace(results[3].String()),
-		relation:        strings.TrimSpace(results[4].String()),
-		startingStation: strings.TrimSpace(results[5].String()),
-		currentStation:  strings.TrimSpace(results[6].String()),
-		arrivingTime:    strings.TrimSpace(results[7].String()),
-		departingTime:   strings.TrimSpace(results[8].String()),
-		ls:              strings.TrimSpace(results[9].String()),
+		TrainNumber:     strings.TrimSpace(results[1].String()),
+		Misc:            strings.TrimSpace(results[2].String()),
+		Class:           strings.TrimSpace(results[3].String()),
+		Relation:        strings.TrimSpace(results[4].String()),
+		StartingStation: strings.TrimSpace(results[5].String()),
+		CurrentStation:  strings.TrimSpace(results[6].String()),
+		ArrivingTime:    strings.TrimSpace(results[7].String()),
+		DepartingTime:   strings.TrimSpace(results[8].String()),
+		Ls:              strings.TrimSpace(results[9].String()),
 	}
 
 	if len(results) > 10 {
-		item.status = strings.TrimSpace(results[10].String())
+		item.Status = strings.TrimSpace(results[10].String())
 	}
 
-	stationParts := strings.FieldsFunc(item.relation, func(r rune) bool {
+	stationParts := strings.FieldsFunc(item.Relation, func(r rune) bool {
 		return r == '-'
 	})
 
-	item.endStation = stationParts[1] // [ANGKE BOGOR] BOGOR is end station
+	item.EndStation = stationParts[1] // [ANGKE BOGOR] BOGOR is end station
 
 	return
 }
