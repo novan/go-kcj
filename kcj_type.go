@@ -1,52 +1,55 @@
 package kcj
 
 type ScheduleItem struct {
-	trainNumber     string
-	misc            string
-	class           string
-	relation        string
-	startingStation string
-	currentStation  string
-	endStation      string
-	arrivingTime    string
-	departingTime   string
-	ls              string
-	status          string
+	TrainNumber     string
+	Misc            string
+	Class           string
+	Relation        string
+	StartingStation string
+	CurrentStation  string
+	EndStation      string
+	ArrivingTime    string
+	DepartingTime   string
+	Ls              string
+	Status          string
 }
 
 type Schedule struct {
-	items      []ScheduleItem
-	totalItems int
+	Items      []ScheduleItem
+	TotalItems int
 }
 
 func (s *Schedule) Len() int {
-	return len(s.items)
+	return len(s.Items)
 }
 
 func (s *Schedule) Less(i, j int) bool {
-	a1 := jktTime(s.items[i].arrivingTime)
-	a2 := jktTime(s.items[j].arrivingTime)
+	a1 := jktTime(s.Items[i].ArrivingTime)
+	a2 := jktTime(s.Items[j].ArrivingTime)
 
 	return a1.Before(a2)
 }
 
 func (s *Schedule) Swap(i, j int) {
-	s.items[i], s.items[j] = s.items[j], s.items[i]
+	s.Items[i], s.Items[j] = s.Items[j], s.Items[i]
 }
 
 func (s *Schedule) IsAllSchedule() bool {
-	return len(s.items) == s.totalItems
+	return len(s.Items) == s.TotalItems
 }
 
 type ByRelation struct{ *Schedule }
 
-func (b ByRelation) Less(i, j int) bool { return b.items[i].relation < b.items[j].relation }
+func (b ByRelation) Less(i, j int) bool { return b.Items[i].Relation < b.Items[j].Relation }
 
 type ByTrainNumber struct{ *Schedule }
 
-func (b ByTrainNumber) Less(i, j int) bool { return b.items[i].trainNumber < b.items[j].trainNumber }
+func (b ByTrainNumber) Less(i, j int) bool { return b.Items[i].TrainNumber < b.Items[j].TrainNumber }
 
 type ScheduleParam struct {
-	station     string
-	trainNumber string
+	Station     string
+	TrainNumber string
+	Relation	string
+	HourFrom	string
+	HourTo		string
 }
