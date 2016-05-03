@@ -24,20 +24,20 @@ func queryAndPrint(scheduleFunction ScheduleQueryFunc, param ScheduleParam, t *t
 	table.SetHeader([]string{"Train Number", "Misc.", "Class", "Relation",
 		"Starting", "Current", "End", "Arriving", "Departing", "LS", "Status"})
 
-	for _, sched := range schedule.items {
+	for _, sched := range schedule.Items {
 		table.Append(
 			[]string{
-				sched.trainNumber,
-				sched.misc,
-				sched.class,
-				sched.relation,
-				sched.startingStation,
-				sched.currentStation,
-				sched.endStation,
-				sched.arrivingTime,
-				sched.departingTime,
-				sched.ls,
-				sched.status,
+				sched.TrainNumber,
+				sched.Misc,
+				sched.Class,
+				sched.Relation,
+				sched.StartingStation,
+				sched.CurrentStation,
+				sched.EndStation,
+				sched.ArrivingTime,
+				sched.DepartingTime,
+				sched.Ls,
+				sched.Status,
 			})
 	}
 
@@ -45,11 +45,11 @@ func queryAndPrint(scheduleFunction ScheduleQueryFunc, param ScheduleParam, t *t
 }
 
 func TestAllTrain(t *testing.T) {
-	queryAndPrint(ScheduleAll, ScheduleParam{trainNumber: "1272"}, t)
+	queryAndPrint(ScheduleAll, ScheduleParam{TrainNumber: "1272"}, t)
 }
 
 func TestAllStation(t *testing.T) {
-	queryAndPrint(ScheduleAll, ScheduleParam{station: "JNG"}, t)
+	queryAndPrint(ScheduleAll, ScheduleParam{Station: "JNG"}, t)
 }
 
 func TestAllTrainNumbers(t *testing.T) {
@@ -79,7 +79,7 @@ func TestAllTrainNumbers(t *testing.T) {
 
 func TestStationPage(t *testing.T) {
 	const currentPage = 0
-	schedule, err := SchedulePage(ScheduleParam{station: "MRI"}, currentPage)
+	schedule, err := SchedulePage(ScheduleParam{Station: "MRI"}, currentPage)
 
 	if err != nil {
 		t.Error(err)
@@ -96,24 +96,24 @@ func TestStationPage(t *testing.T) {
 	table.SetHeader([]string{"Train Number", "Misc.", "Class", "Relation",
 		"Starting", "Current", "Arriving", "Departing", "LS", "Status"})
 
-	for _, sched := range schedule.items {
+	for _, sched := range schedule.Items {
 		table.Append(
 			[]string{
-				sched.trainNumber,
-				sched.misc,
-				sched.class,
-				sched.relation,
-				sched.startingStation,
-				sched.currentStation,
-				sched.arrivingTime,
-				sched.departingTime,
-				sched.ls,
-				sched.status,
+				sched.TrainNumber,
+				sched.Misc,
+				sched.Class,
+				sched.Relation,
+				sched.StartingStation,
+				sched.CurrentStation,
+				sched.ArrivingTime,
+				sched.DepartingTime,
+				sched.Ls,
+				sched.Status,
 			})
 	}
 
 	table.Render()
 
 	fmt.Printf("Total Records is: %v, currently Show Page %v, %v items\n",
-		schedule.totalItems, currentPage, len(schedule.items))
+		schedule.TotalItems, currentPage, len(schedule.Items))
 }
